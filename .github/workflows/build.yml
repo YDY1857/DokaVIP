@@ -1,0 +1,64 @@
+name: Build DokaVip
+
+# 在 GitHub 的 macOS  runner 上用 Theos 编译并打包出 .deb
+# 触发：推送到 main/master、手动触发、或发布 Release 时自动把 .deb 挂到 Release 资源
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    env:
+      THEOS: ${{ github.workspace }}/theos
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew install ldid dpkg fakeroot make
+          # 让 GNU make 优先于系统 BSD make（Theos 推荐 GNU make）
+          # 用 brew --prefix 兼顾 Intel(/usr/local) 与 Apple Silicon(/opt/homebrew)
+          echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Set up Theos
+        run: |
+          set -e
+          git clone --recursive https://github.com/theos/theos.git "$THEOS"
+
+          mkdir -p "$THEOS/sdks"
+          SDK_VER=iPhoneOS16.5.sdk
+          # 优先用官方 tarball；失败则回退到 sparse-clone 官方 SDK 仓库
+          if curl -fSL -o /tmp/sdk.tar.xz "https://github.com/theos/sdks/raw/master/${SDK_VER}.tar.xz"; then
+            echo "使用官方 tarball 安装 SDK"
+            tar -xvf /tmp/sdk.tar.xz -C "$THEOS/sdks"
+          else
+            echo "tarball 失败，回退 sparse-clone SDK 仓库"
+            git clone --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
+            (cd /tmp/sdks && git sparse-checkout set "$SDK_VER")
+            cp -R "/tmp/sdks/$SDK_VER" "$THEOS/sdks/"
+          fi
+          ls -la "$THEOS/sdks"
+
+      - name: Build & package
+        run: make package FINALPACKAGE=1
+
+      - name: List artifacts
+        run: ls -la packages/
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DokaVip-${{ github.run_number }}
+          path: packages/*.deb
+          if-no-files-found: error
+
+      - name: Attach to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*.deb
