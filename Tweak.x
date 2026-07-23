@@ -31,7 +31,7 @@
 #pragma mark - 首次启动欢迎弹窗
 // ====================================================================
 
-static NSString *const DokaWelcomeShownKey = @"com.ydy1857.dokavip.welcome-shown.v1";
+static NSString *const DokaWelcomeShownKey = @"com.ydy1857.dokavip.welcome-shown.v2";
 
 static UIImage *DokaWelcomeIcon(void) {
     Dl_info info;
@@ -40,60 +40,143 @@ static UIImage *DokaWelcomeIcon(void) {
     return [UIImage imageWithContentsOfFile:[directory stringByAppendingPathComponent:@"DokaVipAvatar.jpg"]];
 }
 
+@interface DokaWelcomeOverlay : UIView
+@property(nonatomic, strong) UIButton *enterButton;
+@property(nonatomic, strong) NSTimer *timer;
+@property(nonatomic) NSInteger remaining;
+@end
+
+@implementation DokaWelcomeOverlay
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (!(self = [super initWithFrame:frame])) return nil;
+    self.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.45];
+
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor systemBackgroundColor];
+    card.layer.cornerRadius = 16.0;
+    card.clipsToBounds = YES;
+    [self addSubview:card];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"恭喜您成功安装本应用";
+    title.font = [UIFont boldSystemFontOfSize:18.0];
+    title.textAlignment = NSTextAlignmentCenter;
+
+    UILabel *brand = [UILabel new];
+    brand.text = @"IOS果物集";
+    brand.font = [UIFont boldSystemFontOfSize:17.0];
+    brand.textColor = [UIColor systemRedColor];
+
+    UIImageView *icon = [[UIImageView alloc] initWithImage:DokaWelcomeIcon()];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    icon.layer.cornerRadius = 7.0;
+    icon.clipsToBounds = YES;
+    UIStackView *brandRow = [[UIStackView alloc] initWithArrangedSubviews:@[brand, icon]];
+    brandRow.translatesAutoresizingMaskIntoConstraints = NO;
+    brandRow.axis = UILayoutConstraintAxisHorizontal;
+    brandRow.alignment = UIStackViewAlignmentCenter;
+    brandRow.spacing = 8.0;
+
+    UILabel *body = [UILabel new];
+    body.translatesAutoresizingMaskIntoConstraints = NO;
+    body.text = @"欢迎使用\n\n严禁任何贩卖本插件/软件的盈利行为\n本插件仅供学习研究使用\n请在24小时内自觉删除本插件/软件";
+    body.font = [UIFont systemFontOfSize:14.0];
+    body.textColor = [UIColor labelColor];
+    body.textAlignment = NSTextAlignmentCenter;
+    body.numberOfLines = 0;
+
+    UIView *separator = [UIView new];
+    separator.translatesAutoresizingMaskIntoConstraints = NO;
+    separator.backgroundColor = [UIColor separatorColor];
+
+    self.enterButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.enterButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.enterButton.titleLabel.font = [UIFont systemFontOfSize:17.0];
+    [self.enterButton setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
+    [self.enterButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateDisabled];
+    [self.enterButton addTarget:self action:@selector(enterApp) forControlEvents:UIControlEventTouchUpInside];
+    self.enterButton.enabled = NO;
+
+    [card addSubview:title];
+    [card addSubview:brandRow];
+    [card addSubview:body];
+    [card addSubview:separator];
+    [card addSubview:self.enterButton];
+
+    NSLayoutConstraint *adaptiveWidth = [card.widthAnchor constraintEqualToAnchor:self.widthAnchor constant:-48.0];
+    adaptiveWidth.priority = UILayoutPriorityDefaultHigh;
+    [NSLayoutConstraint activateConstraints:@[
+        [card.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [card.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [card.widthAnchor constraintLessThanOrEqualToConstant:330.0],
+        [card.widthAnchor constraintGreaterThanOrEqualToConstant:270.0],
+        adaptiveWidth,
+        [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:26.0],
+        [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16.0],
+        [title.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16.0],
+        [brandRow.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:18.0],
+        [brandRow.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+        [icon.widthAnchor constraintEqualToConstant:32.0],
+        [icon.heightAnchor constraintEqualToConstant:32.0],
+        [body.topAnchor constraintEqualToAnchor:brandRow.bottomAnchor constant:18.0],
+        [body.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
+        [body.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
+        [separator.topAnchor constraintEqualToAnchor:body.bottomAnchor constant:24.0],
+        [separator.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
+        [separator.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [separator.heightAnchor constraintEqualToConstant:0.5],
+        [self.enterButton.topAnchor constraintEqualToAnchor:separator.bottomAnchor],
+        [self.enterButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
+        [self.enterButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [self.enterButton.heightAnchor constraintEqualToConstant:52.0],
+        [self.enterButton.bottomAnchor constraintEqualToAnchor:card.bottomAnchor]
+    ]];
+
+    self.remaining = 10;
+    [self updateButton];
+    self.timer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(tick:) userInfo:nil repeats:YES];
+    return self;
+}
+
+- (void)updateButton {
+    NSString *text = self.remaining ? [NSString stringWithFormat:@"进入应用（%ld秒）", (long)self.remaining] : @"进入应用";
+    [self.enterButton setTitle:text forState:UIControlStateNormal];
+}
+
+- (void)tick:(NSTimer *)timer {
+    if (--self.remaining > 0) {
+        [self updateButton];
+        return;
+    }
+    [timer invalidate];
+    self.enterButton.enabled = YES;
+    [self updateButton];
+}
+
+- (void)enterApp {
+    [self.timer invalidate];
+    [self removeFromSuperview];
+}
+
+- (void)dealloc {
+    [self.timer invalidate];
+}
+
+@end
+
 static void DokaShowWelcomeOnce(UIViewController *host) {
     static BOOL scheduled = NO;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if (scheduled || [defaults boolForKey:DokaWelcomeShownKey] || !host.view.window) return;
+    UIWindow *window = host.view.window;
+    if (scheduled || [defaults boolForKey:DokaWelcomeShownKey] || !window) return;
     scheduled = YES;
     [defaults setBool:YES forKey:DokaWelcomeShownKey];
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    NSAttributedString *title = [[NSAttributedString alloc]
-        initWithString:@"恭喜您成功安装本应用"
-        attributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:18.0]}];
-    [alert setValue:title forKey:@"attributedTitle"];
-
-    NSMutableAttributedString *message = [[NSMutableAttributedString alloc]
-        initWithString:@"IOS果物集"
-        attributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:17.0],
-                     NSForegroundColorAttributeName: [UIColor systemRedColor]}];
-    UIImage *icon = DokaWelcomeIcon();
-    if (icon) {
-        NSTextAttachment *attachment = [NSTextAttachment new];
-        attachment.image = icon;
-        attachment.bounds = CGRectMake(4.0, -8.0, 32.0, 32.0);
-        [message appendAttributedString:[NSAttributedString attributedStringWithAttachment:attachment]];
-    }
-    [message appendAttributedString:[[NSAttributedString alloc]
-        initWithString:@"\n欢迎使用\n\n严禁任何贩卖本插件/软件的盈利行为\n本插件仅供学习研究使用\n请在24小时内自觉删除本插件/软件"
-        attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:14.0],
-                     NSForegroundColorAttributeName: [UIColor labelColor]}]];
-    NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
-    paragraph.alignment = NSTextAlignmentCenter;
-    paragraph.lineSpacing = 5.0;
-    [message addAttribute:NSParagraphStyleAttributeName value:paragraph range:NSMakeRange(0, message.length)];
-    [alert setValue:message forKey:@"attributedMessage"];
-
-    UIAlertAction *enter = [UIAlertAction actionWithTitle:@"进入应用（10秒）"
-                                                    style:UIAlertActionStyleDefault
-                                                  handler:nil];
-    enter.enabled = NO;
-    [alert addAction:enter];
-    [host presentViewController:alert animated:YES completion:nil];
-
-    __block NSInteger remaining = 10;
-    [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
-        remaining--;
-        if (remaining == 0) {
-            [enter setValue:@"进入应用" forKey:@"title"];
-            enter.enabled = YES;
-            [timer invalidate];
-        } else {
-            [enter setValue:[NSString stringWithFormat:@"进入应用（%ld秒）", (long)remaining] forKey:@"title"];
-        }
-    }];
+    DokaWelcomeOverlay *overlay = [[DokaWelcomeOverlay alloc] initWithFrame:window.bounds];
+    overlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [window addSubview:overlay];
 }
 
 %hook UIViewController
