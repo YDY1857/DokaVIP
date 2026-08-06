@@ -10,7 +10,6 @@ Doka 相机（Follow.app，Bundle ID `com.ydgn.dokacamera`）v1.8.22 的 Theos �
 |------|----------|------|
 | **VIP 解锁（第 1 层）** | Hook `NSJSONSerialization +JSONObjectWithData:options:error:` | 把服务器返回里的 `is_vip` 改成 true、`expire_time` 改成 `2099-12-31 23:59:59`、`remaining_count` 改成 9999 |
 | **VIP 解锁（第 2 层）** | Hook `NSUserDefaults` 的 `objectForKey:` / `stringForKey:` / `integerForKey:` | 覆写本地缓存 `VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`。App 在本地也缓存 VIP 状态，两层必须都改 |
-| **设备身份随机化** | Hook `NSMutableURLRequest -setAllHTTPHeaderFields:` | 每次请求把 `User-Agent-Follow` 头里的 `deviceUUID` / `Device-ID` / `device_model` / `os_version` 换成随机设备，绕过单一设备校验与次数限制 |
 | **Anti-Debug** | `MSHookFunction` 钩 `ptrace` / `sysctl` / `getppid` | 屏蔽 `PT_DENY_ATTACH`、清除 `P_TRACED` 标志、伪装父进程为 launchd |
 
 > 原教程里的「Frida 反检测绕过（异常处理器 + 帧指针回溯）」是 Frida 独有手段，在 Substrate/Substitute 注入模式下不需要——tweak 直接注入，不存在 Frida 进程特征。
@@ -96,10 +95,7 @@ make package FINALPACKAGE=1
 
 针对 v1.8.22 主二进制 `Follow` 校验过以下关键字符串仍存在，故 hook 点有效：
 `VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`、
-`User-Agent-Follow`、`deviceUUID`、`Device-ID`、`device_model`、`os_version`、`is_vip`、`expire_time`、`remaining_count`。
-
-相比 v1.6.5，v1.8.22 的请求头 JSON 已不含 `os_type` / `doka_version`，Tweak.x 里针对此做了兼容
-（只替换存在的设备字段，缺失字段忽略）。
+`is_vip`、`expire_time`、`remaining_count`。
 
 若安装后 VIP 没生效，优先排查：`VipManager` 是否新增了别的本地校验 key（如 `purchaseParams` /
 `freeAIComposeCount`），按需照葫芦画瓢在 `NSUserDefaults` 里再加 hook 即可。

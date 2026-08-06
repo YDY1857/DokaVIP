@@ -5,9 +5,7 @@
  *   1. VIP 解锁 —— 两层覆写：
  *        a) 服务器 JSON 响应里把 is_vip / expire_time / remaining_count 改掉
  *        b) NSUserDefaults 本地缓存里把 VipManager.expiryDate / originalTransactionId / freeUseCount 改掉
- *   2. 设备身份随机化 —— 每次请求把 User-Agent-Follow 头里的 deviceUUID / Device-ID /
- *      device_model / os_version 换成随机设备，绕过"单一设备校验/次数限制"
- *   3. Anti-Debug —— Hook ptrace / sysctl / getppid，隐藏调试痕迹
+ *   2. Anti-Debug —— Hook ptrace / sysctl / getppid，隐藏调试痕迹
  *
  * 说明：原教程里的"Frida 反检测绕过（异常处理器 + 帧指针回溯）"是 Frida 独有的，
  *       在 Substrate/Substitute 注入模式下不需要——tweak 直接注入，不存在 Frida 进程特征。
@@ -189,47 +187,6 @@ static void DokaShowWelcomeOnce(UIViewController *host) {
 %end
 
 // ====================================================================
-#pragma mark - 随机设备池
-// ====================================================================
-
-static NSDictionary *newRandomDevice(void) {
-    // 15 款 iPhone 机型 + 各自匹配的 iOS 版本
-    static NSArray *devices = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        devices = @[
-            @{@"id":@"iPhone15,2", @"model":@"iPhone 14 Pro",     @"versions":@[@"16.0",@"16.1",@"16.2",@"16.3",@"16.4",@"16.5",@"16.6"]},
-            @{@"id":@"iPhone15,3", @"model":@"iPhone 14 Pro Max", @"versions":@[@"16.0",@"16.1",@"16.2",@"16.3",@"16.4",@"16.5",@"16.6"]},
-            @{@"id":@"iPhone14,2", @"model":@"iPhone 13 Pro",     @"versions":@[@"15.0",@"15.1",@"15.2",@"15.3",@"15.4",@"15.5",@"15.6",@"16.0",@"16.1"]},
-            @{@"id":@"iPhone14,3", @"model":@"iPhone 13 Pro Max", @"versions":@[@"15.0",@"15.1",@"15.2",@"15.3",@"15.4",@"15.5",@"15.6",@"16.0",@"16.1"]},
-            @{@"id":@"iPhone14,4", @"model":@"iPhone 13 mini",    @"versions":@[@"15.0",@"15.1",@"15.2",@"15.3",@"15.4",@"15.5",@"15.6",@"16.0",@"16.1"]},
-            @{@"id":@"iPhone14,5", @"model":@"iPhone 13",         @"versions":@[@"15.0",@"15.1",@"15.2",@"15.3",@"15.4",@"15.5",@"15.6",@"16.0",@"16.1"]},
-            @{@"id":@"iPhone13,3", @"model":@"iPhone 12 Pro",     @"versions":@[@"14.0",@"14.1",@"14.2",@"14.3",@"14.4",@"14.5",@"14.6",@"14.7",@"14.8",@"15.0",@"15.1"]},
-            @{@"id":@"iPhone13,4", @"model":@"iPhone 12 Pro Max", @"versions":@[@"14.0",@"14.1",@"14.2",@"14.3",@"14.4",@"14.5",@"14.6",@"14.7",@"14.8",@"15.0",@"15.1"]},
-            @{@"id":@"iPhone12,3", @"model":@"iPhone 11 Pro",     @"versions":@[@"13.0",@"13.1",@"13.2",@"13.3",@"13.4",@"13.5",@"13.6",@"14.0",@"14.1"]},
-            @{@"id":@"iPhone12,5", @"model":@"iPhone 11 Pro Max", @"versions":@[@"13.0",@"13.1",@"13.2",@"13.3",@"13.4",@"13.5",@"13.6",@"14.0",@"14.1"]},
-            @{@"id":@"iPhone15,4", @"model":@"iPhone 15",          @"versions":@[@"17.0",@"17.1",@"17.2",@"17.3",@"17.4",@"17.5",@"17.6"]},
-            @{@"id":@"iPhone15,5", @"model":@"iPhone 15 Plus",     @"versions":@[@"17.0",@"17.1",@"17.2",@"17.3",@"17.4",@"17.5",@"17.6"]},
-            @{@"id":@"iPhone16,1", @"model":@"iPhone 15 Pro",      @"versions":@[@"17.0",@"17.1",@"17.2",@"17.3",@"17.4",@"17.5",@"17.6"]},
-            @{@"id":@"iPhone16,2", @"model":@"iPhone 15 Pro Max",  @"versions":@[@"17.0",@"17.1",@"17.2",@"17.3",@"17.4",@"17.5",@"17.6"]},
-            @{@"id":@"iPhone16,3", @"model":@"iPhone 15 Pro",      @"versions":@[@"17.0",@"17.1",@"17.2",@"17.3",@"17.4",@"17.5",@"17.6"]},
-        ];
-    });
-
-    NSDictionary *d = devices[arc4random_uniform((uint32_t)devices.count)];
-    NSArray *versions = d[@"versions"];
-    NSString *ver = versions[arc4random_uniform((uint32_t)versions.count)];
-    NSString *uuid = [[[NSUUID UUID] UUIDString] lowercaseString];
-
-    return @{
-        @"deviceUUID":   uuid,
-        @"Device-ID":    d[@"id"],
-        @"device_model": d[@"model"],
-        @"os_version":   ver,
-    };
-}
-
-// ====================================================================
 #pragma mark - VIP 解锁（第 1 层）：JSON 响应
 // ====================================================================
 
@@ -288,59 +245,6 @@ static NSDictionary *newRandomDevice(void) {
         return 9999;
     }
     return %orig;
-}
-
-%end
-
-// ====================================================================
-#pragma mark - 设备身份随机化：HTTP 请求头
-//   解析 User-Agent-Follow(JSON) → 替换设备字段 → 序列化回去
-// ====================================================================
-
-// 把 User-Agent-Follow 的 JSON 字符串里的设备字段随机化，返回新字符串（失败则原样返回）
-static NSString *randomizedUserAgentFollow(NSString *ua) {
-    if (![ua isKindOfClass:[NSString class]] || ua.length == 0) return ua;
-
-    NSData *jsonData = [ua dataUsingEncoding:NSUTF8StringEncoding];
-    NSError *err = nil;
-    NSMutableDictionary *parsed = [NSJSONSerialization JSONObjectWithData:jsonData
-                                                                  options:NSJSONReadingMutableContainers
-                                                                    error:&err];
-    if (err || ![parsed isKindOfClass:[NSMutableDictionary class]]) return ua;
-
-    NSDictionary *dev = newRandomDevice();
-    // 只替换存在的设备字段（兼容不同版本字段差异，如 1.8.22 已无 os_type / doka_version）
-    if (dev[@"deviceUUID"])    parsed[@"deviceUUID"]    = dev[@"deviceUUID"];
-    if (dev[@"Device-ID"])     parsed[@"Device-ID"]     = dev[@"Device-ID"];
-    if (dev[@"device_model"])  parsed[@"device_model"]  = dev[@"device_model"];
-    if (dev[@"os_version"])    parsed[@"os_version"]    = dev[@"os_version"];
-
-    NSData *outData = [NSJSONSerialization dataWithJSONObject:parsed options:0 error:&err];
-    if (err || !outData) return ua;
-
-    NSString *res = [[NSString alloc] initWithData:outData encoding:NSUTF8StringEncoding];
-    return res ? res : ua;
-}
-
-%hook NSMutableURLRequest
-
-- (void)setAllHTTPHeaderFields:(NSDictionary *)fields {
-    if (![fields isKindOfClass:[NSDictionary class]] || !fields[@"User-Agent-Follow"]) {
-        %orig;
-        return;
-    }
-    NSMutableDictionary *newFields = [fields mutableCopy];
-    newFields[@"User-Agent-Follow"] = randomizedUserAgentFollow(fields[@"User-Agent-Follow"]);
-    %orig(newFields);
-}
-
-// 备份入口：部分网络栈会用 setValue:forHTTPHeaderField: 单独设置头
-- (void)setValue:(NSString *)value forHTTPHeaderField:(NSString *)field {
-    if ([field isEqualToString:@"User-Agent-Follow"]) {
-        %orig(randomizedUserAgentFollow(value), field);
-    } else {
-        %orig;
-    }
 }
 
 %end
