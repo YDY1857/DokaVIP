@@ -1,10 +1,11 @@
 # DokaVip — Theos tweak Makefile
-# 目标 App: com.ydgn.dokacamera (Doka Camera / Follow) v1.8.22
+# 目标 App: com.ydgn.dokacamera (Doka Camera / Follow) v2.2.6
 # 构建需要 Theos + iOS SDK（由 GitHub Actions 自动准备）
 
 # 平台:工具链:SDK版本:最低部署版本
+# 2.2.6 的 MinimumOSVersion = 15.0，tweak 部署目标设为 15.0 与之对齐
 # latest 会自动选用 $THEOS/sdks 里版本最高的 iOS SDK（我们放的是 16.5）
-TARGET := iphone:clang:latest:13.0
+TARGET := iphone:clang:latest:15.0
 ARCHS := arm64
 
 # 安装（make install）后重启的目标进程名（= CFBundleExecutable）

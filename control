@@ -1,8 +1,8 @@
 Package: com.ydy1857.dokavip
 Name: DokaVip
-Version: 1.8.22
+Version: 2.2.6
 Architecture: iphoneos-arm
-Description: Doka Camera (Follow) VIP 解锁 tweak，仅供技术学习交流。
+Description: Doka Camera (Follow) VIP 解锁 + 设备身份随机化 tweak，仅供技术学习交流。
 Maintainer: YDY1857 <ydy1857@users.noreply.github.com>
 Author: YDY1857 <ydy1857@users.noreply.github.com>
 Section: Tweaks

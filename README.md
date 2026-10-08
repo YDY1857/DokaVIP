@@ -1,6 +1,6 @@
 # DokaVip
 
-Doka 相机（Follow.app，Bundle ID `com.ydgn.dokacamera`）v1.8.22 的 Theos 越狱插件。
+Doka 相机（Follow.app，Bundle ID `com.ydgn.dokacamera`）v2.2.6 的 Theos 越狱插件。
 
 > ⚠️ 仅供技术学习交流，请勿用于商业用途。
 
@@ -9,8 +9,10 @@ Doka 相机（Follow.app，Bundle ID `com.ydgn.dokacamera`）v1.8.22 的 Theos �
 | 功能 | 实现方式 | 说明 |
 |------|----------|------|
 | **VIP 解锁（第 1 层）** | Hook `NSJSONSerialization +JSONObjectWithData:options:error:` | 把服务器返回里的 `is_vip` 改成 true、`expire_time` 改成 `2099-12-31 23:59:59`、`remaining_count` 改成 9999 |
-| **VIP 解锁（第 2 层）** | Hook `NSUserDefaults` 的 `objectForKey:` / `stringForKey:` / `integerForKey:` | 覆写本地缓存 `VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`。App 在本地也缓存 VIP 状态，两层必须都改 |
+| **VIP 解锁（第 2 层）** | Hook `NSUserDefaults` 的 `objectForKey:` / `stringForKey:` / `integerForKey:` | 覆写本地缓存 `VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`、`VipManager.freeAIComposeCount`。App 在本地也缓存 VIP 状态，两层必须都改 |
+| **设备身份随机化** | Hook `NSMutableURLRequest` 的 `setAllHTTPHeaderFields:` / `setValue:forHTTPHeaderField:` | 每次请求把 `User-Agent-Follow` 头里的 `deviceUUID` / `Device-ID` / `device_model` / `os_version` 换成随机设备，绕过单一设备校验、不限制 AI 构图次数 |
 | **Anti-Debug** | `MSHookFunction` 钩 `ptrace` / `sysctl` / `getppid` | 屏蔽 `PT_DENY_ATTACH`、清除 `P_TRACED` 标志、伪装父进程为 launchd |
+| **首次启动欢迎弹窗** | Hook `UIViewController viewDidAppear:`（纯系统 API） | 首次启动展示一次声明弹窗（倒计时后"进入应用"），仅本地 UI、与 App 版本无关，跨版本稳定 |
 
 > 原教程里的「Frida 反检测绕过（异常处理器 + 帧指针回溯）」是 Frida 独有手段，在 Substrate/Substitute 注入模式下不需要——tweak 直接注入，不存在 Frida 进程特征。
 
@@ -91,11 +93,24 @@ make package FINALPACKAGE=1
 # 产物在 ./packages/DokaVip_1.8.22_iphoneos-arm.deb
 ```
 
-## 技术备注 / 已验证点
+## 技术备注 / 已验证点（针对 v2.2.6 主二进制 `Follow`）
 
-针对 v1.8.22 主二进制 `Follow` 校验过以下关键字符串仍存在，故 hook 点有效：
-`VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`、
-`is_vip`、`expire_time`、`remaining_count`。
+已从 2.2.6 的 `Follow` 主二进制提取可打印字符串，确认以下 hook 点**全部存在**：
 
-若安装后 VIP 没生效，优先排查：`VipManager` 是否新增了别的本地校验 key（如 `purchaseParams` /
-`freeAIComposeCount`），按需照葫芦画瓢在 `NSUserDefaults` 里再加 hook 即可。
+- VIP：`VipManager.expiryDate`、`VipManager.originalTransactionId`、`VipManager.freeUseCount`、`VipManager.freeAIComposeCount`、`is_vip`、`expire_time`、`remaining_count`、`ai_compose_remaining_count`、`ai_filter_remaining_count`
+- 设备字段：`User-Agent-Follow`、`deviceUUID`、`Device-ID`、`device_model`、`os_version`、`doka_version`（2.2.6 已回归；1.8.22 没有）
+- 较 1.8.22 新增的 `VipManager.purchaseParams` / `requestValidateReceipt` / `debugMembershipMode` 等仅作观察，未强制 hook；若某次更新后 VIP 仍不生效，再照葫芦画瓢在 `NSUserDefaults` 里加对应 key 即可
+- `os_type` 在 2.2.6 仍不存在，代码已兼容（只替换存在的设备字段）
+
+### 关于"验证插件是否生效"
+
+本机是 Windows，无法本地编译 Theos（需 macOS/iOS 工具链），也无法在真机注入运行，因此**运行时生效验证必须借助 GitHub Actions 构建 + 真机安装**。本仓库已做的静态校验：
+
+1. 上述所有 hook 点字符串已在 2.2.6 二进制中确认存在（即 hook 目标真实存在，不会 hook 到空气）。
+2. `test_welcome.ps1` 对 `Tweak.x` 做结构性断言（欢迎弹窗行为、UIKit 已链接、头像资源存在），可在 Windows 上直接运行回归。
+3. 真正的编译与运行验证：推到 GitHub → Actions 跑出 `.deb` → TrollStore 注入真机，打开 App 看 VIP 状态/次数是否解锁、欢迎弹窗是否出现。
+
+```powershell
+# 在 DokaVip 目录运行结构自检
+powershell -File test_welcome.ps1
+```
